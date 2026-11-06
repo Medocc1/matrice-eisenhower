@@ -115,6 +115,7 @@ h1{margin:0; font-size:30px; font-weight:700; letter-spacing:-.025em; line-heigh
 .qsub{display:block; color:#6B6556; font-size:13px; font-weight:500; margin-top:2px}
 .qcount{min-width:28px; height:28px; padding:0 8px; border-radius:14px; background:var(--qc); color:#fff; font-weight:700; font-size:14px; display:grid; place-items:center; font-variant-numeric:tabular-nums}
 .qcount:empty{display:none}
+.more{display:none}
 .qplus{display:none; flex:none; width:30px; height:30px; border:0; border-radius:6px; background:var(--qc); color:#fff; place-items:center; padding:0; position:relative}
 .qplus svg{width:16px; height:16px}
 .qplus::after{content:""; position:absolute; inset:-6px}
@@ -328,6 +329,11 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .qlist{display:flex; flex-direction:column; align-items:stretch; gap:10px; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:6px 3px 12px; min-height:0}
   .qlist:empty::before{font-size:12px; padding:2px; line-height:1.3}
   .qadd{display:none}
+  .quad{position:relative}
+  .quad.has-more .qlist{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 34px),transparent); mask-image:linear-gradient(to bottom,#000 calc(100% - 34px),transparent)}
+  .more{display:none; position:absolute; left:50%; bottom:8px; transform:translateX(-50%); z-index:3; border:0; border-radius:999px; background:#2B2416; color:#FFF6E6; font-weight:700; font-size:11.5px; padding:5px 11px; box-shadow:0 3px 8px rgba(0,0,0,.35); white-space:nowrap}
+  .more::after{content:""; position:absolute; inset:-8px -4px}
+  .quad.has-more .more{display:block}
   .note{flex:none; min-height:0; padding:15px 7px 7px; transform:rotate(calc(var(--rot) * .5))}
   .note:hover{transform:rotate(calc(var(--rot) * .5))}
   .ntop{gap:6px}
@@ -337,8 +343,8 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .meta svg{width:11px; height:11px}
   .lvl b{min-width:15px; height:15px; font-size:9.5px; padding:0 3px}
   .pin{width:11px; height:11px; margin-left:-5.5px; top:3px}
-  .ndel{width:28px; height:28px; top:2px; right:2px}
-  .ndel::after{inset:-8px}
+  .ndel{width:28px; height:28px; top:4px; right:6px}
+  .ndel::after{inset:-7px}
   .note.done .ntitle{padding-right:22px}
   .below{flex:none; margin-top:4px; justify-content:center}
   .below:empty{display:none}
@@ -662,6 +668,7 @@ function render(){
   $('#today').textContent = new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
   renderTabs(); renderBoard(); renderMini(); renderBelow();
   measureHead();
+  requestAnimationFrame(updateMore);
   if (!state.settings.tipShown && matchMedia('(pointer: coarse)').matches && $('.note:not(.done)')){
     state.settings.tipShown = true; save();
     setTimeout(() => toast('Astuce : appui long sur un pense-bête pour le déplacer dans une autre case.'), 600);
@@ -746,6 +753,7 @@ function renderBoard(){
     return `<section class="quad" data-q="${q}" id="quad-${q}" aria-label="${esc(c.name)}">`
       + `<div class="qhead"><div><h2 class="qname">${esc(c.name)}</h2><span class="qsub">${esc(c.sub)}</span></div><span class="qcount" title="Tâches en cours">${by[q].length || ''}</span><button class="qplus" data-q="${q}" aria-label="Ajouter une tâche dans ${esc(c.name)}">${ICON.plus}</button></div>`
       + `<ul class="qlist" data-q="${q}" data-empty="${esc(EMPTY[q])}">${by[q].map(noteHTML).join('')}${byDone[q].map(noteHTML).join('')}</ul>`
+      + `<button class="more" data-q="${q}" aria-label="Voir les tâches suivantes"></button>`
       + `<form class="qadd" data-q="${q}" autocomplete="off"><input name="t" placeholder="Ajouter une tâche" aria-label="Ajouter une tâche dans ${esc(c.name)}" enterkeyhint="done">`
       + (all && state.lists.length > 1 ? `<select name="list" aria-label="Onglet">${state.lists.map(l => `<option value="${esc(l.id)}" ${l.id === lastList ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>` : '')
       + `<button aria-label="Ajouter">${ICON.plus}</button></form></section>`;
@@ -753,6 +761,20 @@ function renderBoard(){
   if (focusQ) $(`.qadd[data-q="${focusQ}"] input`).focus();
 }
 
+/* Téléphone : signale les pense-bêtes cachés sous le bas d'une case */
+function updateMore(){
+  $$('.quad').forEach(quad => {
+    const ql = $('.qlist', quad), btn = $('.more', quad);
+    if (!ql || !btn) return;
+    let hidden = 0;
+    if (ql.scrollHeight > ql.clientHeight + 2 && getComputedStyle(btn).position === 'absolute'){
+      const bottom = ql.getBoundingClientRect().bottom - 8;
+      $$('.note', ql).forEach(n => { if (n.getBoundingClientRect().top + 24 > bottom) hidden++; });
+    }
+    quad.classList.toggle('has-more', hidden > 0);
+    btn.textContent = hidden ? `${hidden} de plus ↓` : '';
+  });
+}
 function renderMini(){
   const tasks = sortedActive();
   $('#mini').innerHTML = QS.map(q => `<button class="mini-cell" data-q="${q}"><b>${esc(qName(q))}</b><span>${tasks.filter(t => quadOf(t) === q).length}</span></button>`).join('');
@@ -845,6 +867,8 @@ const boardEl = $('#board');
 let suppressClick = false;
 boardEl.addEventListener('click', e => {
   if (suppressClick){ suppressClick = false; return; }
+  const more = e.target.closest('.more');
+  if (more){ const ql = $(`.qlist[data-q="${more.dataset.q}"]`); ql.scrollBy({top:ql.clientHeight * .75, behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'}); return; }
   const plus = e.target.closest('.qplus');
   if (plus){ const q = plus.dataset.q; openTask(null, {important:(q === 'q1' || q === 'q2'), urgency:(q === 'q1' || q === 'q3') ? 'on' : 'auto'}); return; }
   const li = e.target.closest('.note'); if (!li) return;
@@ -1421,7 +1445,8 @@ setInterval(() => { if (todayStr() !== lastDay){ lastDay = todayStr(); render();
 document.addEventListener('visibilitychange', () => { if (!document.hidden){ lastDay = todayStr(); render(); } });
 window.addEventListener('storage', e => { if (e.key === KEY){ state = load(); lastSaved = clone(state); render(); } });
 const mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => render());
-window.addEventListener('resize', measureHead);
+window.addEventListener('resize', () => { measureHead(); updateMore(); });
+boardEl.addEventListener('scroll', e => { if (e.target.classList && e.target.classList.contains('qlist')) updateMore(); }, true);
 let lastY = scrollY;
 window.addEventListener('scroll', () => {
   const y = scrollY, fab = $('#fab');
