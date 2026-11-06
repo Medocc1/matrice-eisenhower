@@ -115,6 +115,9 @@ h1{margin:0; font-size:30px; font-weight:700; letter-spacing:-.025em; line-heigh
 .qsub{display:block; color:#6B6556; font-size:13px; font-weight:500; margin-top:2px}
 .qcount{min-width:28px; height:28px; padding:0 8px; border-radius:14px; background:var(--qc); color:#fff; font-weight:700; font-size:14px; display:grid; place-items:center; font-variant-numeric:tabular-nums}
 .qcount:empty{display:none}
+.qplus{display:none; flex:none; width:30px; height:30px; border:0; border-radius:6px; background:var(--qc); color:#fff; place-items:center; padding:0; position:relative}
+.qplus svg{width:16px; height:16px}
+.qplus::after{content:""; position:absolute; inset:-6px}
 
 /* ---------- Pense-bêtes ---------- */
 .qlist{list-style:none; margin:0; padding:4px 0 6px; flex:1; display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:20px 16px; align-content:start; align-items:start; min-height:90px}
@@ -146,7 +149,7 @@ h1{margin:0; font-size:30px; font-weight:700; letter-spacing:-.025em; line-heigh
 .meta svg{width:13px; height:13px}
 .lvl b{display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:var(--paper-ink); color:var(--paper); font-size:11px; font-weight:700}
 .due.late{color:#A8201A; font-weight:700}
-.due.today{color:var(--paper-ink); font-weight:700}
+.due.due-today{color:var(--paper-ink); font-weight:700}
 .auto{color:color-mix(in srgb, var(--qc) 75%, #000); font-weight:700}
 .note.darkpaper .due.late{color:#FFB4A9}
 .note.darkpaper .auto{color:color-mix(in srgb, var(--qc) 45%, #fff)}
@@ -285,7 +288,10 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
 
 /* ---------- Mobile ---------- */
 @media (max-width:760px){
-  .app{padding:0 12px 120px}
+  html,body{height:100%; overflow:hidden; overscroll-behavior:none}
+  .app{height:100vh; height:100dvh; display:flex; flex-direction:column; padding:0 8px max(8px, env(safe-area-inset-bottom)); overflow:hidden}
+  .top,.stick{flex:none}
+  main{flex:1; min-height:0; display:flex; flex-direction:column}
   .top{padding:max(12px, env(safe-area-inset-top)) 0 4px}
   .stick{position:sticky; top:0; z-index:30; background:var(--bg); margin:0 -12px; padding:max(6px, env(safe-area-inset-top)) 12px 8px; border-bottom:1px solid var(--line)}
   .newtask{display:none}
@@ -304,18 +310,40 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .qadd button{width:42px; height:42px}
   .toast{top:calc(var(--head-h) + 10px); bottom:auto; transform:translateX(-50%) translateY(-16px)}
   .toast.show{transform:translateX(-50%)}
-  .mini{display:grid; grid-template-columns:1fr 1fr; gap:4px}
-  .matrix{display:block; margin-top:14px}
+  .mini{display:none !important}
+  .stick{margin:0 -8px; padding:max(4px, env(safe-area-inset-top)) 8px 6px}
+  .matrix{flex:1; min-height:0; display:flex; margin-top:8px}
   .ax-top,.ax-left{display:none}
-  .board{display:block; border-width:8px; border-radius:12px; margin:0 -4px}
-  .quad{min-height:0; border-right:0 !important; border-bottom:3px solid rgba(70,38,12,.42); padding:16px 14px 16px}
-  .quad[data-q="q4"]{border-bottom:0}
-  .qname{font-size:22px}
-  .qlist{grid-template-columns:1fr 1fr; gap:16px 12px}
-  .note{min-height:110px; padding:20px 10px 10px}
-  .ntitle{font-size:19px}
-  .fab{padding:0; width:58px; justify-content:center; border-radius:50%}
-  .fab .lbl{display:none}
+  .board{flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,1fr); border-width:6px; border-radius:12px}
+  .quad{min-height:0 !important; padding:8px 6px 4px; overflow:hidden; border-width:2px !important}
+  .qhead{align-self:stretch; margin:2px 0 8px; padding:4px 4px 4px 8px; gap:6px; transform:rotate(-.8deg)}
+  .quad[data-q="q2"] .qhead,.quad[data-q="q3"] .qhead{transform:rotate(.8deg)}
+  .qhead > div{min-width:0}
+  .qhead::before{width:38px; height:12px; top:-6px; margin-left:-19px}
+  .qname{font-size:15px; line-height:1.05}
+  .qsub{display:none}
+  .qcount{min-width:20px; height:20px; padding:0 6px; font-size:11px; margin-left:auto}
+  .qcount:empty{display:block; visibility:hidden; margin-left:auto; min-width:0; padding:0}
+  .qplus{display:grid !important}
+  .qlist{display:flex; flex-direction:column; align-items:stretch; gap:10px; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:6px 3px 12px; min-height:0}
+  .qlist:empty::before{font-size:12px; padding:2px; line-height:1.3}
+  .qadd{display:none}
+  .note{flex:none; min-height:0; padding:15px 7px 7px; transform:rotate(calc(var(--rot) * .5))}
+  .note:hover{transform:rotate(calc(var(--rot) * .5))}
+  .ntop{gap:6px}
+  .check{width:20px; height:20px}
+  .ntitle{font-size:16px; line-height:1.12}
+  .meta{font-size:10.5px; gap:2px 6px; padding-top:6px}
+  .meta svg{width:11px; height:11px}
+  .lvl b{min-width:15px; height:15px; font-size:9.5px; padding:0 3px}
+  .pin{width:11px; height:11px; margin-left:-5.5px; top:3px}
+  .ndel{width:28px; height:28px; top:2px; right:2px}
+  .ndel::after{inset:-8px}
+  .note.done .ntitle{padding-right:22px}
+  .below{flex:none; margin-top:4px; justify-content:center}
+  .below:empty{display:none}
+  .clear{font-size:13px; padding:2px}
+  .fab{display:none !important}
   dialog{width:100vw; max-width:100vw; margin:auto 0 0; border-radius:20px 20px 0 0; max-height:92vh}
   dialog[open]{animation:sheet .22s ease-out}
   @keyframes sheet{from{transform:translateY(40px); opacity:.4}}
@@ -680,7 +708,7 @@ function noteHTML(t){
     const d = daysUntil(t.deadline);
     let txt, cls = '';
     if (d < 0){ txt = `En retard de ${-d} j`; cls = 'late'; }
-    else if (d === 0){ txt = 'Aujourd’hui'; cls = 'today'; }
+    else if (d === 0){ txt = 'Aujourd’hui'; cls = 'due-today'; }
     else if (d === 1) txt = 'Demain';
     else txt = fmtShort(t.deadline);
     if (t.done){ txt = fmtShort(t.deadline); cls = ''; }   // tâche barrée : plus de retard
@@ -716,7 +744,7 @@ function renderBoard(){
   board.innerHTML = QS.map(q => {
     const c = state.settings.quadrants[q];
     return `<section class="quad" data-q="${q}" id="quad-${q}" aria-label="${esc(c.name)}">`
-      + `<div class="qhead"><div><h2 class="qname">${esc(c.name)}</h2><span class="qsub">${esc(c.sub)}</span></div><span class="qcount" title="Tâches en cours">${by[q].length || ''}</span></div>`
+      + `<div class="qhead"><div><h2 class="qname">${esc(c.name)}</h2><span class="qsub">${esc(c.sub)}</span></div><span class="qcount" title="Tâches en cours">${by[q].length || ''}</span><button class="qplus" data-q="${q}" aria-label="Ajouter une tâche dans ${esc(c.name)}">${ICON.plus}</button></div>`
       + `<ul class="qlist" data-q="${q}" data-empty="${esc(EMPTY[q])}">${by[q].map(noteHTML).join('')}${byDone[q].map(noteHTML).join('')}</ul>`
       + `<form class="qadd" data-q="${q}" autocomplete="off"><input name="t" placeholder="Ajouter une tâche" aria-label="Ajouter une tâche dans ${esc(c.name)}" enterkeyhint="done">`
       + (all && state.lists.length > 1 ? `<select name="list" aria-label="Onglet">${state.lists.map(l => `<option value="${esc(l.id)}" ${l.id === lastList ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>` : '')
@@ -817,6 +845,8 @@ const boardEl = $('#board');
 let suppressClick = false;
 boardEl.addEventListener('click', e => {
   if (suppressClick){ suppressClick = false; return; }
+  const plus = e.target.closest('.qplus');
+  if (plus){ const q = plus.dataset.q; openTask(null, {important:(q === 'q1' || q === 'q2'), urgency:(q === 'q1' || q === 'q3') ? 'on' : 'auto'}); return; }
   const li = e.target.closest('.note'); if (!li) return;
   if (e.target.closest('.check')) toggleDone(li.dataset.id);
   else if (e.target.closest('.ndel')) removeTask(li.dataset.id);
@@ -941,10 +971,13 @@ function updateTarget(){
   const list = $('.qlist', quad);
   const items = $$('.note:not(.placeholder):not(.done)', list);
   let before = null;
-  for (const it of items){
-    const r = it.getBoundingClientRect();
-    if (drag.y < r.top) { before = it; break; }                           // rangée au-dessus
-    if (drag.y <= r.bottom && drag.x < r.left + r.width / 2) { before = it; break; } // même rangée, moitié gauche
+  const rects = items.map(it => it.getBoundingClientRect());
+  const oneCol = rects.length < 2 || rects.every((r, i) => i === 0 || r.top >= rects[i - 1].bottom - 2);   // pense-bêtes empilés (téléphone)
+  for (let i = 0; i < items.length; i++){
+    const r = rects[i];
+    if (oneCol){ if (drag.y < r.top + r.height / 2){ before = items[i]; break; } continue; }   // une colonne : moitié haute
+    if (drag.y < r.top) { before = items[i]; break; }                           // rangée au-dessus
+    if (drag.y <= r.bottom && drag.x < r.left + r.width / 2) { before = items[i]; break; } // même rangée, moitié gauche
   }
   if (!before) before = $('.note.done', list); // les tâches barrées restent en bas
   if (before){ if (before !== drag.li && before.previousElementSibling !== drag.li) list.insertBefore(drag.li, before); }
@@ -952,6 +985,14 @@ function updateTarget(){
 }
 function autoScroll(){
   if (!drag) return;
+  const el = document.elementFromPoint(drag.x, drag.y), ql = el && el.closest('.quad') && $('.qlist', el.closest('.quad'));
+  if (ql && ql.scrollHeight > ql.clientHeight){
+    const r = ql.getBoundingClientRect(), e2 = 36;
+    let d = 0;
+    if (drag.y < r.top + e2) d = -Math.ceil((r.top + e2 - drag.y) / 4);
+    else if (drag.y > r.bottom - e2) d = Math.ceil((drag.y - (r.bottom - e2)) / 4);
+    if (d){ ql.scrollTop += d; updateTarget(); }
+  }
   const top = getComputedStyle($('#stick')).position === 'sticky' ? $('#stick').getBoundingClientRect().bottom : 0;
   const edge = 70, vh = window.innerHeight;
   let dy = 0;
