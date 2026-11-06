@@ -47,6 +47,17 @@ h1{margin:0; font-size:30px; font-weight:700; letter-spacing:-.025em; line-heigh
 .newtask + .iconbtn{margin-left:0}
 .iconbtn{margin-left:auto; width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--line); background:var(--surface); border-radius:12px; color:var(--ink)}
 .iconbtn svg{width:20px; height:20px}
+.syncbtn{display:none; align-items:center; gap:7px; border:1px solid var(--line); background:var(--surface); border-radius:12px; height:42px; padding:0 12px; font-weight:600; font-size:14px; color:var(--muted)}
+.syncbtn.on{display:flex}
+.syncbtn svg{width:19px; height:19px}
+.syncbtn i{width:8px; height:8px; border-radius:50%; background:var(--muted)}
+.syncbtn[data-s="ok"] i{background:#1F9D55} .syncbtn[data-s="syncing"] i,.syncbtn[data-s="connecting"] i{background:#D08A0E} .syncbtn[data-s="offline"] i,.syncbtn[data-s="error"] i,.syncbtn[data-s="unavailable"] i{background:#C0262F}
+.syncbtn[data-s="signedout"]{color:var(--ink)}
+.syncbox{background:var(--bg); border-radius:12px; padding:12px; margin-top:6px}
+.syncbox .row-actions{margin-top:12px}
+.syncstate{display:flex; align-items:center; gap:8px; font-size:14px; margin:0}
+.syncstate i{width:9px; height:9px; border-radius:50%; flex:none}
+.authform .field{margin:10px 0}
 
 .tabbar{display:flex; align-items:center; gap:6px; margin:0 -4px 14px}
 .tabs{flex:1; min-width:0; display:flex; align-items:center; gap:4px; overflow-x:auto; scrollbar-width:none; padding:4px; -webkit-overflow-scrolling:touch; scroll-behavior:smooth}
@@ -279,6 +290,9 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .stick{position:sticky; top:0; z-index:30; background:var(--bg); margin:0 -12px; padding:max(6px, env(safe-area-inset-top)) 12px 8px; border-bottom:1px solid var(--line)}
   .newtask{display:none}
   .newtask + .iconbtn{margin-left:auto}
+  .syncbtn{height:40px; padding:0 10px} .syncbtn .lbl{display:none}
+  .syncbtn.on ~ .iconbtn, .syncbtn.on + .iconbtn{margin-left:0}
+  .syncbtn.on{margin-left:auto}
   .titlebar{margin-bottom:8px}
   h1{font-size:24px}
   .today{display:none}
@@ -322,6 +336,10 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .qadd input,.qadd select,.field input,.field select,.field textarea,.input{font-size:16px}
 }
 [data-theme="dark"] .ptext strong,[data-theme="dark"] .mini-cell b{color:color-mix(in srgb, var(--qc) 72%, #fff)}
+.top .titlebar .iconbtn,.top .titlebar .newtask,.top .titlebar .syncbtn{margin-left:0}
+.top .titlebar .today{margin-right:auto}
+@media (max-width:760px){ .top .titlebar h1{margin-right:auto} }
+@media (max-height:500px) and (pointer:coarse){ .top .titlebar h1{margin-right:auto} }
 @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
 </style>
 </head>
@@ -332,6 +350,7 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
       <h1 id="appTitle">Mes priorités</h1>
       <span class="today" id="today"></span>
       <button class="btn primary newtask" id="newTaskTop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Nouvelle tâche</button>
+      <button class="syncbtn" id="syncBtn" data-s="off" title="Synchronisation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5z"/></svg><i></i><span class="lbl" id="syncLbl"></span></button>
       <button class="iconbtn" id="openSettings" aria-label="Réglages" title="Réglages">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
       </button>
@@ -443,6 +462,9 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
 
 /* ================= Données ================= */
 const KEY = 'matrice-eisenhower.v1';
+/* Synchronisation : configuration Firebase du projet (null = pas de synchronisation, l'outil reste 100 % local) */
+const FIREBASE_CONFIG = {apiKey:"AIzaSyAmMEYVKiz24az8XfI5j-7Iub5SH-08jEU", authDomain:"matrice-eisenhower-bf08f.firebaseapp.com", projectId:"matrice-eisenhower-bf08f", storageBucket:"matrice-eisenhower-bf08f.firebasestorage.app", messagingSenderId:"938946083999", appId:"1:938946083999:web:7d7244c266464aae9d76aa"};
+const FB_VER = '13.2.0';
 const QS = ['q1','q2','q3','q4'];
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -468,10 +490,10 @@ const LIST_COLORS = ['#6D4AFF','#12A37F','#E4572E','#0E9AA7','#C2185B','#2B59C3'
 
 function defaults(){
   return {
-    version:3, title:'Mes priorités',
+    version:3, title:'Mes priorités', deleted:{}, deletedLists:{}, sharedAt:0,
     lists:[{id:'pro', name:'Pro', color:'#6D4AFF'}, {id:'perso', name:'Perso', color:'#12A37F'}],
     tasks:[],
-    settings:{theme:'auto', quadrants:clone(DEFAULT_Q), scale:DEFAULT_SCALE.map(s => ({id:uid(), ...s})), noLevel:{lead:1, color:'#F6F0E0'}, view:'pro', lastList:'pro', tipShown:false}
+    settings:{theme:'auto', quadrants:clone(DEFAULT_Q), scale:DEFAULT_SCALE.map((s, i) => ({id:'n' + (i + 1), ...s})), noLevel:{lead:1, color:'#F6F0E0'}, view:'pro', lastList:'pro', tipShown:false}
   };
 }
 const isHex = c => /^#[0-9a-f]{6}$/i.test(c || '');
@@ -491,19 +513,22 @@ function normalize(raw){
   const nl = rs.noLevel || {};
   s.settings.noLevel = {lead: nl.lead === undefined ? d.settings.noLevel.lead : Math.max(0, parseInt(nl.lead, 10) || 0), color:isHex(nl.color) ? nl.color : d.settings.noLevel.color};
   if (!Array.isArray(s.lists) || !s.lists.length) s.lists = d.lists;
-  s.lists = s.lists.filter(l => l && l.id).map(l => ({id:String(l.id), name:String(l.name ?? 'Onglet'), color:isHex(l.color) ? l.color : LIST_COLORS[0]}));
+  s.lists = s.lists.filter(l => l && l.id).map(l => ({id:String(l.id), name:String(l.name ?? 'Onglet'), color:isHex(l.color) ? l.color : LIST_COLORS[0], updatedAt:+l.updatedAt || 0}));
   const ids = new Set(s.lists.map(l => l.id));
   s.tasks = (Array.isArray(s.tasks) ? s.tasks : []).filter(t => t && t.id && typeof t.title === 'string').map(t => ({
     id:String(t.id), listId: ids.has(t.listId) ? t.listId : s.lists[0].id, title:t.title, notes:String(t.notes || ''),
     important:!!t.important, urgency: ['auto','on','off'].includes(t.urgency) ? t.urgency : (t.manualUrgent ? 'on' : 'auto'), level:t.level ?? null,
     deadline: /^\d{4}-\d{2}-\d{2}$/.test(t.deadline || '') ? t.deadline : null,
-    done:!!t.done, doneAt:t.doneAt || null, order: (raw.version || 1) < 3 ? (+t.gorder || 0) : (+t.order || 0), createdAt:t.createdAt || Date.now()
+    done:!!t.done, doneAt:t.doneAt || null, order: (raw.version || 1) < 3 ? (+t.gorder || 0) : (+t.order || 0), createdAt:t.createdAt || Date.now(),
+    updatedAt:+t.updatedAt || 0
   }));
-  s.tasks.sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt)).forEach((t, i) => t.order = i);
+  s.tasks.sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).forEach((t, i) => t.order = i);
   if (s.settings.view !== 'all' && !ids.has(s.settings.view)) s.settings.view = s.lists[0].id;
   if (!ids.has(s.settings.lastList)) s.settings.lastList = s.lists[0].id;
   if (!['auto','light','dark'].includes(s.settings.theme)) s.settings.theme = 'auto';
   s.settings.tipShown = !!s.settings.tipShown;
+  const cleanMap = m => { const o = {}; if (m && typeof m === 'object') Object.keys(m).forEach(k => { if (+m[k] > 0) o[k] = +m[k]; }); return o; };
+  s.deleted = cleanMap(raw.deleted); s.deletedLists = cleanMap(raw.deletedLists); s.sharedAt = +raw.sharedAt || (Array.isArray(raw.tasks) && raw.tasks.length ? 1 : 0);   // un appareil déjà utilisé l'emporte sur un appareil vierge
   s.version = 3;
   return s;
 }
@@ -512,13 +537,36 @@ function load(){
   catch(e){ return defaults(); }
 }
 let storageWarned = false;
-function save(){
+function writeLocal(){
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch(e){
     if (!storageWarned){ storageWarned = true; toast('Sauvegarde impossible dans ce navigateur. Exportez vos tâches depuis les réglages pour ne pas les perdre.'); }
   }
 }
+/* Chaque enregistrement date ce qui a changé depuis le précédent (tâches, onglets, réglages partagés)
+   et garde la trace des suppressions : c'est ce qui permet de fusionner proprement deux appareils. */
+const sharedOf = st => ({title:st.title, quadrants:st.settings.quadrants, scale:st.settings.scale, noLevel:st.settings.noLevel});
+const sansDate = o => { const {updatedAt, ...r} = o; return JSON.stringify(r); };
+function stamp(){
+  const now = Date.now(), prev = lastSaved;
+  const pass = (cur, old, del) => {
+    const pm = new Map(old.map(x => [x.id, x]));
+    cur.forEach(x => { const p = pm.get(x.id); x.updatedAt = p && sansDate(p) === sansDate(x) ? (p.updatedAt || now) : now; delete del[x.id]; });
+    const ids = new Set(cur.map(x => x.id));
+    pm.forEach((p, id) => { if (!ids.has(id)) del[id] = now; });
+  };
+  pass(state.tasks, prev.tasks || [], state.deleted);
+  pass(state.lists, prev.lists || [], state.deletedLists);
+  state.sharedAt = prev.settings && JSON.stringify(sharedOf(prev)) === JSON.stringify(sharedOf(state)) ? (prev.sharedAt || 0) : now;
+}
+function save(){
+  stamp();
+  writeLocal();
+  lastSaved = clone(state);
+  schedulePush();
+}
 let state = load();
+let lastSaved = clone(state);
 /* Annuler : chaque action fournit sa propre remise en état, sans toucher à ce qui a été fait ensuite */
 function offerUndo(msg, restore){
   toast(msg, () => { restore(); renumber(); save(); render(); if (typeof setDlg !== 'undefined' && setDlg.open) buildSettings(); });
@@ -554,9 +602,9 @@ const find = id => state.tasks.find(t => t.id === id);
 const listOf = id => state.lists.find(l => l.id === id) || state.lists[0];
 const inView = t => state.settings.view === 'all' || t.listId === state.settings.view;
 function sortedActive(){
-  return state.tasks.filter(t => !t.done && inView(t)).sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt));
+  return state.tasks.filter(t => !t.done && inView(t)).sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
-const renumber = () => state.tasks.slice().sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt)).forEach((t, i) => t.order = i);
+const renumber = () => state.tasks.slice().sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).forEach((t, i) => t.order = i);
 function inkFor(hex){
   const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
   const L = .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
@@ -1182,7 +1230,7 @@ function exampleText(){
 function buildSettings(){
   const s = state.settings;
   const scrollTop = setBody.scrollTop;
-  setBody.innerHTML = `
+  setBody.innerHTML = syncSectionHTML() + `
   <section id="set-leads"><h3>Notes de temps et délais d’urgence</h3>
     <p class="help" style="margin-top:0">La note d’une tâche indique le temps qu’elle prend et donne la couleur du pense-bête. Une tâche avec une échéance passe automatiquement en urgent le nombre de jours choisi avant cette échéance.</p>
     <div class="shead"><span>Note</span><span>Papier</span><span>Durée</span><span>Urgent</span><span></span></div>
@@ -1231,6 +1279,7 @@ setBody.addEventListener('input', e => {
   const ex = $('#leadExample'); if (ex) ex.textContent = exampleText();
   save(); render();
 });
+setBody.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('.authform')){ e.preventDefault(); authAction('signin'); } });
 setBody.addEventListener('focusin', e => { if (e.target.dataset.lk === 'name' || e.target.dataset.k === 'name' || e.target.dataset.sk === 'label') e.target.dataset.prev = e.target.value; });
 setBody.addEventListener('change', e => {
   const el = e.target;
@@ -1260,6 +1309,7 @@ setBody.addEventListener('change', e => {
 setBody.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const s = state.settings, act = b.dataset.act;
+  if (['signin','signup','reset','signout'].includes(act)){ authAction(act); return; }
   if (act === 'resetQ'){ s.quadrants = clone(DEFAULT_Q); }
   else if (act === 'addLevel'){ const last = s.scale[s.scale.length - 1]; s.scale.push({id:uid(), label:'Nouvelle durée', lead:last ? last.lead + 1 : 1, color:NOTE_COLORS[s.scale.length % NOTE_COLORS.length]}); }
   else if (act === 'resetScale'){
@@ -1293,7 +1343,7 @@ setBody.addEventListener('click', async e => {
   else if (act === 'export'){ exportData(); return; }
   else if (act === 'import'){ $('#importFile').click(); return; }
   else if (act === 'wipe'){
-    if (!(await ask('Effacer toutes les tâches et revenir aux réglages d’origine ? Pensez à exporter avant si besoin.', 'Tout effacer'))) return;
+    if (!(await ask('Effacer toutes les tâches et revenir aux réglages d’origine ?' + (sync.user ? ' Elles seront effacées sur tous vos appareils connectés.' : '') + ' Pensez à exporter avant si besoin.', 'Tout effacer'))) return;
     const prev = JSON.stringify(state);
     state = defaults(); save(); render(); buildSettings(); offerUndo('Tout a été effacé', () => { state = normalize(JSON.parse(prev)); });
     return;
@@ -1328,7 +1378,7 @@ $('#importFile').addEventListener('change', async e => {
 let lastDay = todayStr();
 setInterval(() => { if (todayStr() !== lastDay){ lastDay = todayStr(); render(); } }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden){ lastDay = todayStr(); render(); } });
-window.addEventListener('storage', e => { if (e.key === KEY){ state = load(); render(); } });
+window.addEventListener('storage', e => { if (e.key === KEY){ state = load(); lastSaved = clone(state); render(); } });
 const mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => render());
 window.addEventListener('resize', measureHead);
 let lastY = scrollY;
@@ -1339,7 +1389,194 @@ window.addEventListener('scroll', () => {
   lastY = y;
 }, {passive:true});
 
+/* ================= Synchronisation (Firebase) =================
+   Les tâches restent d'abord dans le navigateur : l'outil marche hors ligne et sans compte.
+   Connecté, chaque appareil envoie ses changements et reçoit ceux des autres ; les deux versions
+   sont fusionnées tâche par tâche (la modification la plus récente l'emporte, les suppressions sont respectées). */
+const sync = {attempt:0, status:'off', user:null, fb:null, unsub:null, timer:0, pushing:false, again:false, lastPushed:'', lastSync:0, err:''};
+const TOMB_DAYS = 90;
+function sortKeys(m){ const o = {}; Object.keys(m || {}).sort().forEach(k => o[k] = m[k]); return o; }
+function syncable(st){
+  return {v:3, sharedAt:st.sharedAt || 0, shared:sharedOf(st), lists:st.lists,
+    tasks:st.tasks.slice().sort((a, b) => (a.order - b.order) || (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    deleted:sortKeys(st.deleted), deletedLists:sortKeys(st.deletedLists)};
+}
+function mergeStates(L, R){
+  const now = Date.now(), limit = now - TOMB_DAYS * 86400000;
+  const tombs = (a, b) => { const o = {...(b || {})}; Object.entries(a || {}).forEach(([k, v]) => o[k] = Math.max(o[k] || 0, v)); Object.keys(o).forEach(k => { if (o[k] < limit) delete o[k]; }); return o; };
+  const del = tombs(L.deleted, R.deleted), delL = tombs(L.deletedLists, R.deletedLists);
+  const pick = (a, b, d) => {
+    const m = new Map();
+    [...(b || []), ...(a || [])].forEach(x => { const c = m.get(x.id); if (!c || (x.updatedAt || 0) > (c.updatedAt || 0)) m.set(x.id, x); });
+    return [...m.values()].filter(x => !(d[x.id] && d[x.id] >= (x.updatedAt || 0)));
+  };
+  const out = clone(L);
+  out.tasks = clone(pick(L.tasks, R.tasks, del));
+  const lists = clone(pick(L.lists, R.lists, delL));
+  out.lists = lists.length ? lists : L.lists;
+  out.deleted = del; out.deletedLists = delL;
+  const rs = R.sharedAt || 0, ls = L.sharedAt || 0;
+  // à égalité, départage fixe : les deux appareils retiennent forcément la même version
+  if (R.shared && (rs > ls || (rs === ls && JSON.stringify(R.shared) > JSON.stringify(sharedOf(L))))){
+    out.title = R.shared.title; out.settings.quadrants = R.shared.quadrants; out.settings.scale = R.shared.scale; out.settings.noLevel = R.shared.noLevel;
+    out.sharedAt = R.sharedAt;
+  }
+  return normalize(out);
+}
+window.__matrice = {mergeStates, syncable, normalize, get state(){ return state; }, get sync(){ return sync; }};
+function adopt(remoteObj){
+  const before = JSON.stringify(syncable(state));
+  state = mergeStates(state, remoteObj);
+  writeLocal(); lastSaved = clone(state);
+  if (JSON.stringify(syncable(state)) !== before){
+    render();
+    if (taskDlg.open) refreshTaskForm();
+    if (setDlg.open && !setBody.contains(document.activeElement)) buildSettings();
+  }
+}
+const SYNC_TXT = {off:'', connecting:'Connexion…', signedout:'Non synchronisé', syncing:'Synchronisation…', ok:'Synchronisé', offline:'Hors ligne', error:'Erreur de synchronisation', unavailable:'Synchro indisponible'};
+const SYNC_COLOR = {ok:'#1F9D55', syncing:'#D08A0E', connecting:'#D08A0E', offline:'#C0262F', error:'#C0262F', unavailable:'#C0262F', signedout:'#9CA3B0'};
+function setStatus(st, err){
+  sync.status = st; sync.err = err ? (err.code || err.message || String(err)) : '';
+  const b = $('#syncBtn');
+  b.classList.toggle('on', !!FIREBASE_CONFIG);
+  b.dataset.s = st; $('#syncLbl').textContent = SYNC_TXT[st] || '';
+  b.title = syncDetail();
+  const el = $('#syncStateTxt'); if (el){ el.textContent = syncDetail(); const dot = $('#syncStateDot'); if (dot) dot.style.background = SYNC_COLOR[st] || '#9CA3B0'; }
+}
+function syncDetail(){
+  const st = sync.status;
+  if (st === 'ok') return 'Synchronisé' + (sync.lastSync ? ' à ' + new Date(sync.lastSync).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}) : '');
+  if (st === 'offline') return 'Hors ligne : vos modifications sont gardées sur cet appareil et partiront au retour du réseau.';
+  if (st === 'error') return 'La synchronisation a échoué. Nouvel essai automatique dans un instant.';
+  if (st === 'unavailable') return 'Synchronisation indisponible (pas de connexion internet ?). L’outil fonctionne quand même sur cet appareil.';
+  if (st === 'signedout') return 'Non connecté : les tâches restent sur cet appareil.';
+  return SYNC_TXT[st] || '';
+}
+function syncSectionHTML(){
+  if (!FIREBASE_CONFIG) return '';
+  const head = '<section id="set-sync"><h3>Synchronisation</h3>';
+  if (!sync.fb) return head + `<div class="syncbox"><p class="syncstate"><i id="syncStateDot" style="background:${SYNC_COLOR[sync.status] || '#9CA3B0'}"></i><span id="syncStateTxt">${esc(syncDetail())}</span></p></div></section>`;
+  if (sync.user) return head + `<div class="syncbox"><p class="syncstate"><i id="syncStateDot" style="background:${SYNC_COLOR[sync.status] || '#9CA3B0'}"></i><span id="syncStateTxt">${esc(syncDetail())}</span></p>
+    <p class="help">Connecté avec <strong>${esc(sync.user.email)}</strong>. Vos tâches suivent sur tous les appareils où vous vous connectez avec ce compte.</p>
+    <div class="row-actions"><button class="btn small" data-act="signout">Se déconnecter</button></div></div></section>`;
+  return head + `<div class="syncbox authform">
+    <p class="help" style="margin-top:0">Connectez-vous pour retrouver vos tâches sur votre ordinateur et votre téléphone. Sans compte, elles restent sur cet appareil.</p>
+    <label class="field"><span>E-mail</span><input type="email" class="input" id="authEmail" autocomplete="username" inputmode="email" placeholder="vous@exemple.fr"></label>
+    <label class="field"><span>Mot de passe</span><input type="password" class="input" id="authPass" autocomplete="current-password" placeholder="6 caractères minimum"></label>
+    <p class="err" id="authErr"></p>
+    <div class="row-actions"><button class="btn small primary" data-act="signin">Se connecter</button><button class="btn small" data-act="signup">Créer un compte</button><button class="linkbtn" data-act="reset" style="font-size:14px">Mot de passe oublié ?</button></div>
+  </div></section>`;
+}
+const AUTH_ERR = {
+  'auth/invalid-email':'Cette adresse e-mail n’est pas valide.',
+  'auth/missing-email':'Entrez votre adresse e-mail.',
+  'auth/missing-password':'Entrez votre mot de passe.',
+  'auth/invalid-credential':'E-mail ou mot de passe incorrect.',
+  'auth/wrong-password':'E-mail ou mot de passe incorrect.',
+  'auth/user-not-found':'Aucun compte n’existe avec cet e-mail. Créez-en un.',
+  'auth/email-already-in-use':'Un compte existe déjà avec cet e-mail : connectez-vous.',
+  'auth/weak-password':'Mot de passe trop court : 6 caractères minimum.',
+  'auth/too-many-requests':'Trop d’essais. Réessayez dans quelques minutes.',
+  'auth/network-request-failed':'Pas de connexion internet. Réessayez une fois connecté.',
+  'auth/user-disabled':'Ce compte a été désactivé.'
+};
+async function authAction(act){
+  const f = sync.fb; if (!f) return;
+  const errEl = $('#authErr'), email = ($('#authEmail') || {}).value?.trim() || '', pass = ($('#authPass') || {}).value || '';
+  const fail = e => { if (errEl) errEl.textContent = AUTH_ERR[e.code] || 'Une erreur est survenue. Réessayez.'; };
+  if (errEl) errEl.textContent = '';
+  try {
+    if (act === 'signin'){ if (!email) return fail({code:'auth/missing-email'}); if (!pass) return fail({code:'auth/missing-password'}); await f.signInWithEmailAndPassword(f.auth, email, pass); }
+    else if (act === 'signup'){ if (!email) return fail({code:'auth/missing-email'}); if (pass.length < 6) return fail({code:'auth/weak-password'}); await f.createUserWithEmailAndPassword(f.auth, email, pass); }
+    else if (act === 'reset'){ if (!email) return fail({code:'auth/missing-email'}); await f.sendPasswordResetEmail(f.auth, email); toast('Si un compte existe pour cette adresse, un e-mail de réinitialisation vient d’être envoyé.'); }
+    else if (act === 'signout'){ await f.signOut(f.auth); toast('Déconnecté. Vos tâches restent sur cet appareil.'); }
+  } catch(e){ fail(e); }
+}
+function schedulePush(delay = 1200){
+  if (!sync.user) return;
+  clearTimeout(sync.timer);
+  sync.timer = setTimeout(pushNow, delay);
+}
+async function pushNow(){
+  const f = sync.fb, user = sync.user; if (!f || !user) return;
+  if (sync.pushing){ sync.again = true; return; }
+  sync.pushing = true; setStatus('syncing');
+  const attempt = ++sync.attempt;
+  try {
+    const ref = f.doc(f.db, 'users', user.uid);
+    let mergedObj = null;
+    const tooLong = new Promise((_, rej) => setTimeout(() => rej({code:'unavailable'}), 15000));
+    await Promise.race([tooLong, f.runTransaction(f.db, async tx => {
+      const snap = await tx.get(ref);
+      let merged = state;
+      if (snap.exists()){ try { merged = mergeStates(state, JSON.parse(snap.data().state)); } catch(_){} }
+      mergedObj = syncable(merged);
+      const payload = JSON.stringify(mergedObj);
+      sync.lastPushed = payload;
+      if (snap.exists() && snap.data().state === payload) return;
+      tx.set(ref, {state:payload, updatedAt:f.serverTimestamp(), app:'matrice-eisenhower'});
+    })]);
+    if (sync.user !== user || attempt !== sync.attempt) return;
+    if (mergedObj) adopt(mergedObj);
+    clearTimeout(sync.retry);
+    sync.lastSync = Date.now(); setStatus('ok');
+  } catch(e){
+    if (attempt !== sync.attempt) return;
+    sync.lastPushed = '';
+    setStatus(navigator.onLine === false || e.code === 'unavailable' ? 'offline' : 'error', e);
+    clearTimeout(sync.retry); sync.retry = setTimeout(pushNow, navigator.onLine === false ? 15000 : 8000);
+  } finally {
+    if (attempt !== sync.attempt) return;
+    sync.pushing = false;
+    if (sync.again){ sync.again = false; schedulePush(300); }
+  }
+}
+function onUser(user){
+  const changed = (sync.user && sync.user.uid) !== (user && user.uid);
+  sync.user = user || null;
+  if (sync.unsub){ sync.unsub(); sync.unsub = null; }
+  if (!user){ setStatus('signedout'); if (changed && setDlg.open) buildSettings(); return; }
+  const f = sync.fb, ref = f.doc(f.db, 'users', user.uid);
+  setStatus('syncing');
+  sync.unsub = f.onSnapshot(ref, {includeMetadataChanges:false}, snap => {
+    if (snap.metadata.hasPendingWrites || snap.metadata.fromCache) return;
+    if (!snap.exists() || snap.data().state !== sync.lastPushed) schedulePush(0);
+    else { sync.lastSync = Date.now(); setStatus('ok'); }
+  }, err => { setStatus('error', err); });
+  schedulePush(0);
+  if (changed){ if (setDlg.open) buildSettings(); toast(`Connecté : ${user.email}. Vos tâches sont synchronisées.`); }
+}
+async function initSync(){
+  if (!FIREBASE_CONFIG) return;
+  setStatus('connecting');
+  try {
+    const base = `https://www.gstatic.com/firebasejs/${FB_VER}/`;
+    const [appM, authM, fsM] = await Promise.all(['app', 'auth', 'firestore'].map(n => import(base + `firebase-${n}.js`)));
+    const app = appM.initializeApp(FIREBASE_CONFIG);
+    const auth = authM.getAuth(app); auth.languageCode = 'fr';
+    const db = fsM.getFirestore(app);
+    sync.fb = {...authM, ...fsM, auth, db};
+    let first = true;
+    authM.onAuthStateChanged(auth, user => { if (first){ first = false; sync.user = user; onUser(user); sync.firstDone = true; } else onUser(user); if (setDlg.open && !setBody.contains(document.activeElement)) buildSettings(); });
+  } catch(e){
+    setStatus('unavailable', e);
+    setTimeout(initSync, 30000);
+  }
+}
+$('#syncBtn').addEventListener('click', () => openSettings('sync'));
+async function reconnect(){
+  const f = sync.fb; if (!f || !sync.user) return;
+  try { await f.disableNetwork(f.db); await f.enableNetwork(f.db); } catch(_){}
+  if (sync.pushing){ sync.attempt++; sync.pushing = false; }   // l'envoi en attente est abandonné, on en relance un neuf
+  schedulePush(0);
+}
+window.addEventListener('online', () => { if (sync.user) reconnect(); else if (FIREBASE_CONFIG && !sync.fb) initSync(); });
+window.addEventListener('offline', () => { if (sync.user) setStatus('offline'); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && sync.user) schedulePush(0); });
+
 render();
+initSync();
 })();
 </script>
 </body>
