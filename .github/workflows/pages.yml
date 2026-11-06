@@ -1,0 +1,58 @@
+# Publie le site : la branche main à la racine (version client),
+# la branche beta dans /beta/ (version de test).
+name: Publier le site
+
+on:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - name: Récupérer la version client (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Récupérer la version de test (beta)
+        uses: actions/checkout@v4
+        with:
+          ref: beta
+          path: beta
+        continue-on-error: true
+
+      - name: Assembler le site
+        run: |
+          mkdir -p site
+          cp main/index.html site/index.html
+          touch site/.nojekyll
+          if [ -f beta/index.html ]; then
+            mkdir -p site/beta
+            cp beta/index.html site/beta/index.html
+          fi
+          ls -R site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Mettre en ligne
+        id: deploiement
+        uses: actions/deploy-pages@v4
