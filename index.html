@@ -336,6 +336,10 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
   .qadd input,.qadd select,.field input,.field select,.field textarea,.input{font-size:16px}
 }
 [data-theme="dark"] .ptext strong,[data-theme="dark"] .mini-cell b{color:color-mix(in srgb, var(--qc) 72%, #fff)}
+.top .titlebar .iconbtn,.top .titlebar .newtask,.top .titlebar .syncbtn{margin-left:0}
+.top .titlebar .today{margin-right:auto}
+@media (max-width:760px){ .top .titlebar h1{margin-right:auto} }
+@media (max-height:500px) and (pointer:coarse){ .top .titlebar h1{margin-right:auto} }
 @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
 </style>
 </head>
@@ -459,7 +463,7 @@ input[type="color"]{width:42px; height:40px; border:1px solid var(--line); borde
 /* ================= Données ================= */
 const KEY = 'matrice-eisenhower.v1';
 /* Synchronisation : configuration Firebase du projet (null = pas de synchronisation, l'outil reste 100 % local) */
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {apiKey:"AIzaSyAmMEYVKiz24az8XfI5j-7Iub5SH-08jEU", authDomain:"matrice-eisenhower-bf08f.firebaseapp.com", projectId:"matrice-eisenhower-bf08f", storageBucket:"matrice-eisenhower-bf08f.firebasestorage.app", messagingSenderId:"938946083999", appId:"1:938946083999:web:7d7244c266464aae9d76aa"};
 const FB_VER = '13.2.0';
 const QS = ['q1','q2','q3','q4'];
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
@@ -489,7 +493,7 @@ function defaults(){
     version:3, title:'Mes priorités', deleted:{}, deletedLists:{}, sharedAt:0,
     lists:[{id:'pro', name:'Pro', color:'#6D4AFF'}, {id:'perso', name:'Perso', color:'#12A37F'}],
     tasks:[],
-    settings:{theme:'auto', quadrants:clone(DEFAULT_Q), scale:DEFAULT_SCALE.map(s => ({id:uid(), ...s})), noLevel:{lead:1, color:'#F6F0E0'}, view:'pro', lastList:'pro', tipShown:false}
+    settings:{theme:'auto', quadrants:clone(DEFAULT_Q), scale:DEFAULT_SCALE.map((s, i) => ({id:'n' + (i + 1), ...s})), noLevel:{lead:1, color:'#F6F0E0'}, view:'pro', lastList:'pro', tipShown:false}
   };
 }
 const isHex = c => /^#[0-9a-f]{6}$/i.test(c || '');
@@ -524,7 +528,7 @@ function normalize(raw){
   if (!['auto','light','dark'].includes(s.settings.theme)) s.settings.theme = 'auto';
   s.settings.tipShown = !!s.settings.tipShown;
   const cleanMap = m => { const o = {}; if (m && typeof m === 'object') Object.keys(m).forEach(k => { if (+m[k] > 0) o[k] = +m[k]; }); return o; };
-  s.deleted = cleanMap(raw.deleted); s.deletedLists = cleanMap(raw.deletedLists); s.sharedAt = +raw.sharedAt || 0;
+  s.deleted = cleanMap(raw.deleted); s.deletedLists = cleanMap(raw.deletedLists); s.sharedAt = +raw.sharedAt || (Array.isArray(raw.tasks) && raw.tasks.length ? 1 : 0);   // un appareil déjà utilisé l'emporte sur un appareil vierge
   s.version = 3;
   return s;
 }
@@ -1389,7 +1393,7 @@ window.addEventListener('scroll', () => {
    Les tâches restent d'abord dans le navigateur : l'outil marche hors ligne et sans compte.
    Connecté, chaque appareil envoie ses changements et reçoit ceux des autres ; les deux versions
    sont fusionnées tâche par tâche (la modification la plus récente l'emporte, les suppressions sont respectées). */
-const sync = {status:'off', user:null, fb:null, unsub:null, timer:0, pushing:false, again:false, lastPushed:'', lastSync:0, err:''};
+const sync = {attempt:0, status:'off', user:null, fb:null, unsub:null, timer:0, pushing:false, again:false, lastPushed:'', lastSync:0, err:''};
 const TOMB_DAYS = 90;
 function sortKeys(m){ const o = {}; Object.keys(m || {}).sort().forEach(k => o[k] = m[k]); return o; }
 function syncable(st){
@@ -1411,13 +1415,15 @@ function mergeStates(L, R){
   const lists = clone(pick(L.lists, R.lists, delL));
   out.lists = lists.length ? lists : L.lists;
   out.deleted = del; out.deletedLists = delL;
-  if ((R.sharedAt || 0) > (L.sharedAt || 0) && R.shared){
+  const rs = R.sharedAt || 0, ls = L.sharedAt || 0;
+  // à égalité, départage fixe : les deux appareils retiennent forcément la même version
+  if (R.shared && (rs > ls || (rs === ls && JSON.stringify(R.shared) > JSON.stringify(sharedOf(L))))){
     out.title = R.shared.title; out.settings.quadrants = R.shared.quadrants; out.settings.scale = R.shared.scale; out.settings.noLevel = R.shared.noLevel;
     out.sharedAt = R.sharedAt;
   }
   return normalize(out);
 }
-window.__matrice = {mergeStates, syncable, normalize, get state(){ return state; }};
+window.__matrice = {mergeStates, syncable, normalize, get state(){ return state; }, get sync(){ return sync; }};
 function adopt(remoteObj){
   const before = JSON.stringify(syncable(state));
   state = mergeStates(state, remoteObj);
@@ -1496,10 +1502,12 @@ async function pushNow(){
   const f = sync.fb, user = sync.user; if (!f || !user) return;
   if (sync.pushing){ sync.again = true; return; }
   sync.pushing = true; setStatus('syncing');
+  const attempt = ++sync.attempt;
   try {
     const ref = f.doc(f.db, 'users', user.uid);
     let mergedObj = null;
-    await f.runTransaction(f.db, async tx => {
+    const tooLong = new Promise((_, rej) => setTimeout(() => rej({code:'unavailable'}), 15000));
+    await Promise.race([tooLong, f.runTransaction(f.db, async tx => {
       const snap = await tx.get(ref);
       let merged = state;
       if (snap.exists()){ try { merged = mergeStates(state, JSON.parse(snap.data().state)); } catch(_){} }
@@ -1508,15 +1516,18 @@ async function pushNow(){
       sync.lastPushed = payload;
       if (snap.exists() && snap.data().state === payload) return;
       tx.set(ref, {state:payload, updatedAt:f.serverTimestamp(), app:'matrice-eisenhower'});
-    });
-    if (sync.user !== user) return;
+    })]);
+    if (sync.user !== user || attempt !== sync.attempt) return;
     if (mergedObj) adopt(mergedObj);
+    clearTimeout(sync.retry);
     sync.lastSync = Date.now(); setStatus('ok');
   } catch(e){
+    if (attempt !== sync.attempt) return;
     sync.lastPushed = '';
     setStatus(navigator.onLine === false || e.code === 'unavailable' ? 'offline' : 'error', e);
-    clearTimeout(sync.timer); sync.timer = setTimeout(pushNow, navigator.onLine === false ? 15000 : 8000);
+    clearTimeout(sync.retry); sync.retry = setTimeout(pushNow, navigator.onLine === false ? 15000 : 8000);
   } finally {
+    if (attempt !== sync.attempt) return;
     sync.pushing = false;
     if (sync.again){ sync.again = false; schedulePush(300); }
   }
@@ -1554,7 +1565,13 @@ async function initSync(){
   }
 }
 $('#syncBtn').addEventListener('click', () => openSettings('sync'));
-window.addEventListener('online', () => { if (sync.user) schedulePush(0); else if (FIREBASE_CONFIG && !sync.fb) initSync(); });
+async function reconnect(){
+  const f = sync.fb; if (!f || !sync.user) return;
+  try { await f.disableNetwork(f.db); await f.enableNetwork(f.db); } catch(_){}
+  if (sync.pushing){ sync.attempt++; sync.pushing = false; }   // l'envoi en attente est abandonné, on en relance un neuf
+  schedulePush(0);
+}
+window.addEventListener('online', () => { if (sync.user) reconnect(); else if (FIREBASE_CONFIG && !sync.fb) initSync(); });
 window.addEventListener('offline', () => { if (sync.user) setStatus('offline'); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && sync.user) schedulePush(0); });
 
